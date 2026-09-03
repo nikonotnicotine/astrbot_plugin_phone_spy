@@ -1,0 +1,110 @@
+{
+    "smtp_host": {
+        "type": "string",
+        "description": "SMTP 服务器地址（如 smtp.qq.com）",
+        "default": "smtp.qq.com",
+        "hint": "推荐用 QQ 邮箱 SMTP，速度快"
+    },
+    "smtp_port": {
+        "type": "int",
+        "description": "SMTP 端口（465 SSL 或 587 STARTTLS）",
+        "default": 465,
+        "hint": "QQ 邮箱用 465"
+    },
+    "smtp_user": {
+        "type": "string",
+        "description": "发件邮箱地址",
+        "default": "",
+        "hint": "如 123456@qq.com"
+    },
+    "smtp_password": {
+        "type": "string",
+        "description": "SMTP 授权码（不是登录密码）",
+        "default": "",
+        "hint": "在邮箱设置里生成授权码，不是账号密码"
+    },
+    "icloud_address": {
+        "type": "string",
+        "description": "iPhone 的 iCloud 邮箱地址",
+        "default": "",
+        "hint": "必须填 xxx@icloud.com，QQ/Gmail 有延迟不能用"
+    },
+    "webhook_port": {
+        "type": "int",
+        "description": "接收截图的 HTTP 端口",
+        "default": 8080,
+        "hint": "确保该端口对外可访问（防火墙/NAT 放行）"
+    },
+    "webhook_path": {
+        "type": "string",
+        "description": "接收截图的路径",
+        "default": "/phone/screenshot",
+        "hint": "快捷指令里 POST 的 URL 路径"
+    },
+    "webhook_secret": {
+        "type": "string",
+        "description": "POST 请求密钥（16 位以上随机字符串）",
+        "default": "",
+        "hint": "防止陌生人向接口推送假截图，自己随机生成即可"
+    },
+    "vision_api_url": {
+        "type": "string",
+        "description": "视觉模型 API 地址",
+        "default": "",
+        "hint": "填 OpenAI 兼容格式，如 https://api.openai.com/v1/chat/completions"
+    },
+    "vision_api_key": {
+        "type": "string",
+        "description": "视觉模型 API 密钥",
+        "default": "",
+        "hint": "对应上方 API 的密钥"
+    },
+    "vision_model": {
+        "type": "string",
+        "description": "视觉模型名称",
+        "default": "gpt-4o",
+        "hint": "如 gpt-4o、qwen-vl-plus 等支持图片的模型"
+    },
+    "vision_prompt": {
+        "type": "string",
+        "description": "视觉模型提示词",
+        "default": "你是一个查岗助手，请直接回复，详细描述这张手机屏幕截图的内容。告诉我用户现在大概在干什么（比如在刷抖音、看微信消息、打游戏、听音乐等）。",
+        "hint": "自定义视觉模型分析手机屏幕时使用的提示词"
+    },
+    "timeout_seconds": {
+        "type": "int",
+        "description": "等待手机响应的超时时间（秒）",
+        "default": 90,
+        "hint": "手机截图+上传通常 5-15 秒，建议设 60-120"
+    },
+    "vision_api_timeout": {
+        "type": "int",
+        "description": "视觉模型解析超时时间（秒）",
+        "default": 60,
+        "hint": "视觉大模型处理较慢时可调大"
+    },
+    "forward_image": {
+        "type": "bool",
+        "description": "是否将手机截图原图发送到聊天中",
+        "default": false,
+        "hint": "开启后截图会同步发给你自己看"
+    },
+    "auto_fallback": {
+        "type": "bool",
+        "description": "手机查看失败时自动查看电脑屏幕",
+        "default": true,
+        "hint": "需要同时安装 screen_spy 插件（屏幕查岗）"
+    },
+    "fallback_prompt_template": {
+        "type": "string",
+        "description": "故障转移时返回给 LLM 的提示词模板",
+        "default": "当前{{failed_device}}因为{{error}}无法查看，系统已返回目前活跃的{{active_device}}设备，请根据人设与上下文向用户发送信息。",
+        "hint": "支持变量：{{failed_device}}、{{active_device}}、{{error}}"
+    },
+    "both_failed_prompt_template": {
+        "type": "string",
+        "description": "手机和电脑都失败时返回给 LLM 的提示词模板",
+        "default": "无法查看当前用户电脑与手机的屏幕，原因可能是{{error}}，可能用户正在忙或者在睡觉，请根据人设向用户发送信息。",
+        "hint": "支持变量：{{error}}"
+    }
+}

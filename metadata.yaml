@@ -1,0 +1,6 @@
+name: astrbot_plugin_phone_spy
+display_name: 手机查岗 (Phone Spy)
+desc: 让 LLM 通过 iOS 快捷指令自动触发 iPhone 截屏，并视觉分析回复。支持与屏幕查岗插件互为故障转移。
+version: 1.0.0
+author: nikonotnicotine
+repo: https://github.com/nikonotnicotine/astrbot_plugin_phone_spy
