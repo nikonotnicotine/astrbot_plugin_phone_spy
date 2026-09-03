@@ -19,10 +19,11 @@ MAX_REQUEST_SIZE = 16 * 1024 * 1024
 
 
 class ScreenshotReceiver:
-    def __init__(self, port: int, path: str, secret: str) -> None:
+    def __init__(self, port: int, path: str, secret: str, json_paths: list[str] | None = None) -> None:
         self.port = port
         self.path = self._normalize_path(path)
         self.secret = secret
+        self.json_paths = [self._normalize_path(p) for p in (json_paths or [])]
         self._app: web.Application | None = None
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
@@ -113,6 +114,44 @@ class ScreenshotReceiver:
             return web.Response(status=200, text="ok")
         return web.Response(status=200, text="ok")
 
+    async def _handle_json(self, request: web.Request) -> web.Response:
+        """处理 JSON 数据上传（位置、电量等）。"""
+        if request.method not in ("POST", "PUT"):
+            return web.Response(status=405, text="method not allowed")
+
+        try:
+            post = await request.post()
+        except Exception as e:
+            logger.error(f"解析 JSON POST 请求失败: {e}")
+            return web.Response(status=400, text="bad request")
+
+        # 校验密钥
+        secret = post.get("secret")
+        if secret != self.secret:
+            logger.warning("⚠️ 收到密钥不匹配的 JSON 请求，已拒绝。")
+            return web.Response(status=403, text="forbidden")
+
+        # 提取 data 字段（JSON 文本）
+        data = post.get("data")
+        if data is None:
+            logger.warning("⚠️ 收到缺少 data 字段的 JSON 请求，已拒绝。")
+            return web.Response(status=400, text="missing data field")
+
+        # 转换为字节
+        if isinstance(data, str):
+            data_bytes = data.encode("utf-8")
+        elif isinstance(data, bytes):
+            data_bytes = data
+        else:
+            logger.warning("⚠️ data 字段类型不正确，已拒绝。")
+            return web.Response(status=400, text="invalid data type")
+
+        fulfilled = pending_manager.fulfill(data_bytes)
+        if fulfilled is None:
+            logger.info("JSON 数据已接收，但没有待处理的请求。")
+            return web.Response(status=200, text="ok")
+        return web.Response(status=200, text="ok")
+
     @property
     def is_running(self) -> bool:
         return self._runner is not None
@@ -123,6 +162,12 @@ class ScreenshotReceiver:
         try:
             self._app = web.Application(client_max_size=MAX_REQUEST_SIZE)
             self._app.router.add_route("*", self.path, self._handle)
+
+            # 注册 JSON 数据路由
+            for json_path in self.json_paths:
+                self._app.router.add_route("*", json_path, self._handle_json)
+                logger.info(f"📡 已注册 JSON 数据路由: {json_path}")
+
             self._runner = web.AppRunner(self._app, access_log=None)
             await self._runner.setup()
             self._site = web.TCPSite(

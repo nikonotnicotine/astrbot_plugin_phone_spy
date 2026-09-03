@@ -13,9 +13,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import tempfile
 
+import aiohttp
 from astrbot.api import logger
 from astrbot.api.all import Image, MessageChain, llm_tool
 from astrbot.api.event import AstrMessageEvent
@@ -64,20 +66,101 @@ class PhoneSpy(Star):
             "无法查看当前用户电脑与手机的屏幕，原因可能是{{error}}，可能用户正在忙或者在睡觉，请根据人设向用户发送信息。",
         )
 
+        # 网易云音乐配置
+        netease = self.config.get("netease_music", {})
+        self.netease_enabled = netease.get("enable_music_control", False)
+        self.netease_daily = netease.get("enable_daily_recommend", False)
+        self.netease_fm = netease.get("enable_personal_fm", False)
+        self.netease_favorite = netease.get("enable_favorite_playlist", False)
+        self.netease_playlist_id = netease.get("favorite_playlist_id", "")
+        self.netease_play_pause = netease.get("enable_play_pause", False)
+        self.netease_play_song = netease.get("enable_play_song", False)
+        self.auto_screenshot_after_music = netease.get("auto_screenshot_after_music", False)
+
+        # 查看类配置
+        view_actions = self.config.get("view_actions", {})
+        self.enable_battery = view_actions.get("enable_battery", False)
+        self.enable_wechat = view_actions.get("enable_wechat", False)
+        self.enable_alipay = view_actions.get("enable_alipay", False)
+        self.enable_bilibili = view_actions.get("enable_bilibili", False)
+        self.enable_douyin_msg = view_actions.get("enable_douyin_msg", False)
+        self.enable_douyin_profile = view_actions.get("enable_douyin_profile", False)
+        self.enable_taobao_order = view_actions.get("enable_taobao_order", False)
+        self.enable_taobao_cart = view_actions.get("enable_taobao_cart", False)
+        self.auto_screenshot_view = view_actions.get("auto_screenshot", True)
+
+        # 控制类配置
+        control_actions = self.config.get("control_actions", {})
+        self.enable_location = control_actions.get("enable_location", False)
+        self.enable_alarm = control_actions.get("enable_alarm", False)
+        self.enable_lock_screen = control_actions.get("enable_lock_screen", False)
+        self.auto_screenshot_after_control = control_actions.get("auto_screenshot_after_control", False)
+
     async def initialize(self) -> None:
-        """插件激活时启动截图接收服务。"""
+        """插件激活时启动截图接收服务，并按配置注入工具。"""
         if not self.webhook_secret or len(self.webhook_secret) < 16:
             logger.warning(
                 "⚠️ webhook_secret 未配置或长度不足 16 字符，"
                 "截图接收服务仍会启动，但 iPhone 快捷指令将无法通过校验。"
             )
 
+        # 按需注册 JSON 数据路由
+        json_paths = []
+        if self.enable_location:
+            json_paths.append("/phone/location")
+        if self.enable_battery:
+            json_paths.append("/phone/battery")
+
         self.receiver = ScreenshotReceiver(
             port=self.webhook_port,
             path=self.webhook_path,
             secret=self.webhook_secret,
+            json_paths=json_paths,
         )
         await self.receiver.start()
+
+        # 按需移除未启用的工具，节省 token 开销
+        tm = self.context.get_llm_tool_manager()
+
+        if not self.netease_enabled:
+            for fn in ("play_netease_daily", "play_netease_fm",
+                       "play_netease_favorite", "play_pause_music",
+                       "play_netease_song"):
+                tm.remove_func(fn)
+        else:
+            if not self.netease_daily:
+                tm.remove_func("play_netease_daily")
+            if not self.netease_fm:
+                tm.remove_func("play_netease_fm")
+            if not self.netease_favorite:
+                tm.remove_func("play_netease_favorite")
+            if not self.netease_play_pause:
+                tm.remove_func("play_pause_music")
+            if not self.netease_play_song:
+                tm.remove_func("play_netease_song")
+
+        if not self.enable_battery:
+            tm.remove_func("get_phone_battery")
+        if not self.enable_wechat:
+            tm.remove_func("view_wechat")
+        if not self.enable_alipay:
+            tm.remove_func("view_alipay_bill")
+        if not self.enable_bilibili:
+            tm.remove_func("view_bilibili_history")
+        if not self.enable_douyin_msg:
+            tm.remove_func("view_douyin_messages")
+        if not self.enable_douyin_profile:
+            tm.remove_func("view_douyin_profile")
+        if not self.enable_taobao_order:
+            tm.remove_func("view_taobao_orders")
+        if not self.enable_taobao_cart:
+            tm.remove_func("view_taobao_cart")
+        if not self.enable_location:
+            tm.remove_func("get_phone_location")
+        if not self.enable_alarm:
+            tm.remove_func("set_phone_alarm")
+        if not self.enable_lock_screen:
+            tm.remove_func("lock_phone_screen")
 
     async def terminate(self) -> None:
         """插件禁用/重载时停止接收服务并清理。"""
@@ -223,3 +306,219 @@ class PhoneSpy(Star):
             asyncio.create_task(cleanup_temp_file(temp_path))
         except Exception as e:
             logger.error(f"📷 截图转发失败: {type(e).__name__} - {e}")
+
+    # ------------------------------------------------------------------ #
+    # 内部帮助方法                                                          #
+    # ------------------------------------------------------------------ #
+
+    def _smtp_kwargs(self) -> dict:
+        """返回发邮件所需的公共 SMTP 参数。"""
+        return dict(
+            host=self.smtp_host,
+            port=self.smtp_port,
+            username=self.smtp_user,
+            password=self.smtp_password,
+            to_address=self.icloud_address,
+        )
+
+    async def _wait_screenshot_and_analyze(self, action_name: str) -> str:
+        """等待截图回传并用视觉模型分析，返回描述字符串。超时时返回提示文本。"""
+        if not self.vision_api_url or not self.vision_api_key:
+            return f"已发送{action_name}指令（视觉模型未配置，无法分析截图）。"
+        req_id = pending_manager.create()
+        try:
+            image_data = await pending_manager.wait(req_id, self.timeout_seconds)
+        except asyncio.TimeoutError:
+            return f"{action_name}：截图未在 {self.timeout_seconds} 秒内回传。"
+        try:
+            content = await analyze_image(
+                image_data=image_data,
+                api_url=self.vision_api_url,
+                api_key=self.vision_api_key,
+                model=self.vision_model,
+            )
+        except Exception as e:
+            logger.error(f"视觉模型分析失败: {e}")
+            return f"{action_name}：已收到截图，但视觉模型分析失败（{type(e).__name__}）。"
+        return f"{action_name}完成，屏幕内容：\n{content}"
+
+    async def _search_netease_song(self, keyword: str) -> tuple[str, str] | tuple[None, None]:
+        """搜索网易云歌曲，返回 (歌曲ID, 显示名)。未找到时返回 (None, None)。"""
+        url = "https://music.163.com/api/cloudsearch/pc"
+        params = {"s": keyword, "type": 1, "offset": 0, "limit": 1}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+            "Referer": "https://music.163.com/",
+            "Cookie": "NMTID=1",
+        }
+        async with aiohttp.ClientSession() as sess:
+            async with sess.get(url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json(content_type=None)
+        songs = (data.get("result") or {}).get("songs") or []
+        if not songs:
+            return None, None
+        s = songs[0]
+        artists = "/".join(a["name"] for a in s.get("ar", []))
+        return str(s["id"]), f"{s['name']} - {artists}"
+
+    # ------------------------------------------------------------------ #
+    # 网易云音乐工具                                                        #
+    # ------------------------------------------------------------------ #
+
+    @llm_tool("play_netease_daily")
+    async def play_netease_daily(self, event: AstrMessageEvent):
+        """播放网易云音乐每日推荐。需要用户在网易云 App 里注册「每日推荐」Siri 捷径。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_MUSIC_DAILY")
+        if self.auto_screenshot_after_music:
+            return await self._wait_screenshot_and_analyze("播放每日推荐")
+        return "已向 iPhone 发送播放每日推荐指令。"
+
+    @llm_tool("play_netease_fm")
+    async def play_netease_fm(self, event: AstrMessageEvent):
+        """播放网易云音乐私人 FM。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_MUSIC_FM")
+        if self.auto_screenshot_after_music:
+            return await self._wait_screenshot_and_analyze("播放私人 FM")
+        return "已向 iPhone 发送播放私人 FM 指令。"
+
+    @llm_tool("play_netease_favorite")
+    async def play_netease_favorite(self, event: AstrMessageEvent):
+        """播放网易云音乐红心歌单（我喜欢的音乐）。"""
+        if self.netease_playlist_id:
+            body = f"orpheus://playlist/{self.netease_playlist_id}/?autoplay=1"
+            await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_MUSIC_FAVORITE", body=body)
+        else:
+            await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_MUSIC_FAVORITE")
+        if self.auto_screenshot_after_music:
+            return await self._wait_screenshot_and_analyze("播放红心歌单")
+        return "已向 iPhone 发送播放红心歌单指令。"
+
+    @llm_tool("play_pause_music")
+    async def play_pause_music(self, event: AstrMessageEvent):
+        """播放或暂停当前正在播放的音乐（系统级媒体控制，适用于所有音乐 App）。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_MUSIC_PLAYPAUSE")
+        return "已向 iPhone 发送播放/暂停指令。"
+
+    @llm_tool("play_netease_song")
+    async def play_netease_song(self, event: AstrMessageEvent, song_name: str):
+        """
+        在网易云音乐播放指定歌曲。
+        参数:
+            song_name: 歌曲名称，如"晴天"、"稻香 周杰伦"
+        """
+        try:
+            song_id, display_name = await self._search_netease_song(song_name)
+        except Exception as e:
+            logger.error(f"搜索网易云歌曲失败: {e}")
+            return f"搜索歌曲《{song_name}》时网络出错，请稍后再试。"
+
+        if song_id is None:
+            return f"未找到歌曲《{song_name}》，请换个关键词试试。"
+
+        scheme = f"orpheus://song/{song_id}/?autoplay=1"
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_MUSIC_PLAY", body=scheme)
+        if self.auto_screenshot_after_music:
+            return await self._wait_screenshot_and_analyze(f"播放《{display_name}》")
+        return f"已向 iPhone 发送播放《{display_name}》指令。"
+
+    # ------------------------------------------------------------------ #
+    # 查看类工具                                                            #
+    # ------------------------------------------------------------------ #
+
+    @llm_tool("get_phone_battery")
+    async def get_phone_battery(self, event: AstrMessageEvent):
+        """获取用户 iPhone 的当前电池电量百分比。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_BATTERY")
+        req_id = pending_manager.create()
+        try:
+            raw = await pending_manager.wait(req_id, self.timeout_seconds)
+            data = json.loads(raw.decode("utf-8"))
+            level = data.get("level", data.get("battery", "未知"))
+            return f"iPhone 当前电量：{level}%"
+        except asyncio.TimeoutError:
+            return f"获取电量失败：iPhone 未在 {self.timeout_seconds} 秒内响应。"
+        except Exception as e:
+            return f"获取电量失败：{e}"
+
+    @llm_tool("view_wechat")
+    async def view_wechat(self, event: AstrMessageEvent):
+        """打开 iPhone 上的微信并截图，让 AI 看到当前的微信界面。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_WECHAT")
+        return await self._wait_screenshot_and_analyze("查看微信")
+
+    @llm_tool("view_alipay_bill")
+    async def view_alipay_bill(self, event: AstrMessageEvent):
+        """打开支付宝账单页面并截图。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_ALIPAY")
+        return await self._wait_screenshot_and_analyze("查看支付宝账单")
+
+    @llm_tool("view_bilibili_history")
+    async def view_bilibili_history(self, event: AstrMessageEvent):
+        """打开 B 站观看历史页面并截图。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_BILIBILI")
+        return await self._wait_screenshot_and_analyze("查看 B 站历史")
+
+    @llm_tool("view_douyin_messages")
+    async def view_douyin_messages(self, event: AstrMessageEvent):
+        """打开抖音私信页面并截图。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_DOUYIN_MSG")
+        return await self._wait_screenshot_and_analyze("查看抖音私信")
+
+    @llm_tool("view_douyin_profile")
+    async def view_douyin_profile(self, event: AstrMessageEvent):
+        """打开抖音个人主页并截图。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_DOUYIN_PROFILE")
+        return await self._wait_screenshot_and_analyze("查看抖音个人主页")
+
+    @llm_tool("view_taobao_orders")
+    async def view_taobao_orders(self, event: AstrMessageEvent):
+        """打开淘宝订单页面并截图。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_TAOBAO_ORDER")
+        return await self._wait_screenshot_and_analyze("查看淘宝订单")
+
+    @llm_tool("view_taobao_cart")
+    async def view_taobao_cart(self, event: AstrMessageEvent):
+        """打开淘宝购物车并截图。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_TAOBAO_CART")
+        return await self._wait_screenshot_and_analyze("查看淘宝购物车")
+
+    # ------------------------------------------------------------------ #
+    # 控制类工具                                                            #
+    # ------------------------------------------------------------------ #
+
+    @llm_tool("get_phone_location")
+    async def get_phone_location(self, event: AstrMessageEvent):
+        """获取用户 iPhone 的当前 GPS 地理位置（街道地址 + 经纬度）。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_LOCATION")
+        req_id = pending_manager.create()
+        try:
+            raw = await pending_manager.wait(req_id, self.timeout_seconds)
+            loc = json.loads(raw.decode("utf-8"))
+            return (
+                f"用户当前位置：{loc.get('address', '未知')}"
+                f"（经度 {loc.get('longitude', '?')}，纬度 {loc.get('latitude', '?')}）"
+            )
+        except asyncio.TimeoutError:
+            return f"获取位置失败：iPhone 未在 {self.timeout_seconds} 秒内响应。"
+        except Exception as e:
+            return f"获取位置失败：{e}"
+
+    @llm_tool("set_phone_alarm")
+    async def set_phone_alarm(self, event: AstrMessageEvent, time: str):
+        """
+        在 iPhone 上设置一个闹钟。
+        参数:
+            time: 闹钟时间，格式 HH:MM，如 "07:30"、"22:00"
+        """
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_ALARM", body=time)
+        if self.auto_screenshot_after_control:
+            return await self._wait_screenshot_and_analyze(f"设置闹钟 {time}")
+        return f"已向 iPhone 发送设置闹钟 {time} 的指令。"
+
+    @llm_tool("lock_phone_screen")
+    async def lock_phone_screen(self, event: AstrMessageEvent):
+        """锁定用户的 iPhone 屏幕。"""
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_LOCK")
+        if self.auto_screenshot_after_control:
+            return await self._wait_screenshot_and_analyze("锁定屏幕")
+        return "已向 iPhone 发送锁定屏幕指令。"

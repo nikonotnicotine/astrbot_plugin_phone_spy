@@ -28,18 +28,24 @@ async def send_trigger_email(
     username: str,
     password: str,
     to_address: str,
+    subject: str = TRIGGER_SUBJECT,
+    body: str = TRIGGER_BODY,
 ) -> None:
     """向 to_address 发送一封触发邮件。
 
     根据端口选择连接方式：
     - 465: SSL 直连 (use_tls=True)
     - 587: STARTTLS 加密 (start_tls=True)
+
+    参数:
+        subject: 邮件主题，默认为 TRIGGER_SUBJECT
+        body: 邮件正文，默认为 TRIGGER_BODY
     """
     message = EmailMessage()
     message["From"] = username
     message["To"] = [to_address]
-    message["Subject"] = TRIGGER_SUBJECT
-    message.set_content(TRIGGER_BODY)
+    message["Subject"] = subject
+    message.set_content(body)
 
     use_tls = port == 465
 

@@ -94,5 +94,149 @@
         "description": "手机和电脑都失败时的提示模板",
         "default": "无法查看当前用户电脑与手机的屏幕，原因可能是{{error}}，可能用户正在忙或者在睡觉，请根据人设向用户发送信息。",
         "hint": "可用变量: {{error}}（内含手机与电脑各自的失败原因）"
+    },
+    "netease_music": {
+        "type": "object",
+        "description": "网易云音乐控制",
+        "items": {
+            "enable_music_control": {
+                "type": "bool",
+                "description": "是否开启 AI 控制网易云音乐",
+                "default": false,
+                "hint": "开启后 AI 可以控制你的 iPhone 播放网易云音乐。需要在 iPhone 上配置对应的快捷指令"
+            },
+            "enable_daily_recommend": {
+                "type": "bool",
+                "description": "播放每日推荐",
+                "default": false,
+                "hint": "需要先在网易云 App 里注册「每日推荐」的 Siri 捷径"
+            },
+            "enable_personal_fm": {
+                "type": "bool",
+                "description": "播放私人 FM",
+                "default": false,
+                "hint": "需要先在网易云 App 里注册「私人 FM」的 Siri 捷径"
+            },
+            "enable_favorite_playlist": {
+                "type": "bool",
+                "description": "播放红心歌单",
+                "default": false,
+                "hint": "需要先在网易云 App 里注册「我喜欢的音乐」Siri 捷径"
+            },
+            "favorite_playlist_id": {
+                "type": "string",
+                "description": "红心歌单 ID（可选）",
+                "default": "",
+                "hint": "如果使用 URL Scheme 方式，需要填写歌单 ID。打开网易云「我喜欢的音乐」→ 分享 → 复制链接 → playlist 后面那串数字"
+            },
+            "enable_play_pause": {
+                "type": "bool",
+                "description": "播放/暂停当前歌曲",
+                "default": false,
+                "hint": "使用 iOS 系统级媒体控制，不依赖网易云"
+            },
+            "enable_play_song": {
+                "type": "bool",
+                "description": "播放指定歌曲（需网络搜索）",
+                "default": false,
+                "hint": "AI 说「播放晴天」时，插件会自动搜索歌曲 ID 并通过 URL Scheme 播放"
+            },
+            "auto_screenshot_after_music": {
+                "type": "bool",
+                "description": "每次网易云操作后自动截图",
+                "default": false,
+                "hint": "开启后会等待 3 秒并截图，让 AI 确认播放状态。关闭则操作后立即返回"
+            }
+        }
+    },
+    "view_actions": {
+        "type": "object",
+        "description": "查看类操作（必须截图）",
+        "items": {
+            "enable_battery": {
+                "type": "bool",
+                "description": "查看手机电量",
+                "default": false,
+                "hint": "获取 iPhone 当前电量百分比"
+            },
+            "enable_wechat": {
+                "type": "bool",
+                "description": "打开微信并截图",
+                "default": false,
+                "hint": "打开微信 App 并截图，让 AI 看到聊天列表"
+            },
+            "enable_alipay": {
+                "type": "bool",
+                "description": "查看支付宝账单",
+                "default": false,
+                "hint": "打开支付宝账单页面并截图"
+            },
+            "enable_bilibili": {
+                "type": "bool",
+                "description": "查看 B 站观看历史",
+                "default": false,
+                "hint": "打开 B 站历史记录页面并截图"
+            },
+            "enable_douyin_msg": {
+                "type": "bool",
+                "description": "查看抖音私信",
+                "default": false,
+                "hint": "打开抖音私信页面并截图"
+            },
+            "enable_douyin_profile": {
+                "type": "bool",
+                "description": "查看抖音个人主页",
+                "default": false,
+                "hint": "打开抖音个人主页并截图"
+            },
+            "enable_taobao_order": {
+                "type": "bool",
+                "description": "查看淘宝订单",
+                "default": false,
+                "hint": "打开淘宝订单页面并截图"
+            },
+            "enable_taobao_cart": {
+                "type": "bool",
+                "description": "查看淘宝购物车",
+                "default": false,
+                "hint": "打开淘宝购物车并截图"
+            },
+            "auto_screenshot": {
+                "type": "bool",
+                "description": "查看类功能是否自动截图",
+                "default": true,
+                "hint": "⚠️ 关闭此项后，AI 将无法看到屏幕内容，查看类功能会失去意义"
+            }
+        }
+    },
+    "control_actions": {
+        "type": "object",
+        "description": "控制类操作",
+        "items": {
+            "enable_location": {
+                "type": "bool",
+                "description": "获取手机位置",
+                "default": false,
+                "hint": "获取 iPhone 当前 GPS 位置"
+            },
+            "enable_alarm": {
+                "type": "bool",
+                "description": "设置闹钟",
+                "default": false,
+                "hint": "AI 可以帮你在 iPhone 上设置闹钟"
+            },
+            "enable_lock_screen": {
+                "type": "bool",
+                "description": "锁定屏幕",
+                "default": false,
+                "hint": "远程锁定 iPhone 屏幕"
+            },
+            "auto_screenshot_after_control": {
+                "type": "bool",
+                "description": "控制类操作后是否截图",
+                "default": false,
+                "hint": "控制类功能（播放音乐、定闹钟、锁屏）不需要截图。开启此项可以确认操作结果"
+            }
+        }
     }
 }
