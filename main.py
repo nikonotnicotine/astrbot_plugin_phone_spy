@@ -367,7 +367,7 @@ class PhoneSpy(Star):
 
     @llm_tool("play_netease_daily")
     async def play_netease_daily(self, event: AstrMessageEvent):
-        """播放网易云音乐每日推荐。需要用户在网易云 App 里注册「每日推荐」Siri 捷径。"""
+        """播放网易云音乐每日推荐。"""
         await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_MUSIC_DAILY")
         if self.auto_screenshot_after_music:
             return await self._wait_screenshot_and_analyze("播放每日推荐")
@@ -375,11 +375,11 @@ class PhoneSpy(Star):
 
     @llm_tool("play_netease_fm")
     async def play_netease_fm(self, event: AstrMessageEvent):
-        """播放网易云音乐私人 FM。"""
+        """播放网易云音乐私人漫游（私人 FM）。"""
         await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_MUSIC_FM")
         if self.auto_screenshot_after_music:
-            return await self._wait_screenshot_and_analyze("播放私人 FM")
-        return "已向 iPhone 发送播放私人 FM 指令。"
+            return await self._wait_screenshot_and_analyze("播放私人漫游")
+        return "已向 iPhone 发送播放私人漫游指令。"
 
     @llm_tool("play_netease_favorite")
     async def play_netease_favorite(self, event: AstrMessageEvent):

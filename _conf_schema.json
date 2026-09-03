@@ -109,25 +109,25 @@
                 "type": "bool",
                 "description": "播放每日推荐",
                 "default": false,
-                "hint": "需要先在网易云 App 里注册「每日推荐」的 Siri 捷径"
+                "hint": "快捷指令里直接用网易云自带动作「播放每日推荐（启动 App）」，scene 参数留空即可"
             },
             "enable_personal_fm": {
                 "type": "bool",
-                "description": "播放私人 FM",
+                "description": "播放私人漫游 / 私人 FM",
                 "default": false,
-                "hint": "需要先在网易云 App 里注册「私人 FM」的 Siri 捷径"
+                "hint": "快捷指令里直接用网易云自带动作「播放私人漫游（启动 App）」，scene 参数留空即可"
             },
             "enable_favorite_playlist": {
                 "type": "bool",
                 "description": "播放红心歌单",
                 "default": false,
-                "hint": "需要先在网易云 App 里注册「我喜欢的音乐」Siri 捷径"
+                "hint": "快捷指令里直接用网易云自带动作「红心歌单（启动 App）」，scene 参数留空即可"
             },
             "favorite_playlist_id": {
                 "type": "string",
-                "description": "红心歌单 ID（可选）",
+                "description": "红心歌单 ID（一般不用填）",
                 "default": "",
-                "hint": "如果使用 URL Scheme 方式，需要填写歌单 ID。打开网易云「我喜欢的音乐」→ 分享 → 复制链接 → playlist 后面那串数字"
+                "hint": "留空即可。仅当你不用网易云自带动作、改用 URL Scheme 时才需要：打开网易云「我喜欢的音乐」→ 分享 → 复制链接 → playlist 后面那串数字"
             },
             "enable_play_pause": {
                 "type": "bool",
