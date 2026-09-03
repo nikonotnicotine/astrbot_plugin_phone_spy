@@ -1,87 +1,87 @@
 {
     "smtp_host": {
         "type": "string",
-        "description": "SMTP 服务器地址",
-        "default": "smtp.qq.com",
-        "hint": "发送触发邮件用。QQ 邮箱: smtp.qq.com, 163 邮箱: smtp.163.com, Outlook: smtp.office365.com, Gmail 用户请使用应用专用密码"
+        "description": "【发件方】SMTP 服务器地址",
+        "default": "smtp.mail.me.com",
+        "hint": "AstrBot 用哪个邮箱账号「发出」触发邮件。推荐直接用 iCloud 自己发给自己：smtp.mail.me.com。其他可选：QQ 邮箱 smtp.qq.com、163 邮箱 smtp.163.com、Gmail smtp.gmail.com"
     },
     "smtp_port": {
         "type": "int",
-        "description": "SMTP 服务器端口",
-        "default": 465,
-        "hint": "465 = SSL 连接；587 = STARTTLS 连接"
+        "description": "【发件方】SMTP 端口",
+        "default": 587,
+        "hint": "iCloud 必须用 587。QQ/163 用 465。规则：465 = SSL 直连，587 = STARTTLS"
     },
     "smtp_user": {
         "type": "string",
-        "description": "SMTP 登录账号",
+        "description": "【发件方】登录账号（完整邮箱地址）",
         "default": "",
-        "hint": "例如 yourname@qq.com"
+        "hint": "用 iCloud 发信就填你的 iCloud 地址（如 richard.883@gmail.com）。这个地址稍后要填进 iPhone 自动化的「发件人」条件里"
     },
     "smtp_password": {
         "type": "string",
-        "description": "SMTP 授权码/专用密码",
+        "description": "【发件方】App 专用密码 / 授权码",
         "default": "",
-        "hint": "不是登录密码！QQ 邮箱请在设置-账户-开启 SMTP 后获取授权码"
+        "hint": "不是你的登录密码！iCloud: 到 account.apple.com 生成「App 专用密码」（需先开启双重认证）。QQ 邮箱: 设置-账户-开启 SMTP 后获取授权码"
     },
     "icloud_address": {
         "type": "string",
-        "description": "iCloud 邮箱地址",
+        "description": "【收件方】iPhone 上登录的 iCloud 邮箱",
         "default": "",
-        "hint": "触发邮件将发送到这个邮箱，iOS 快捷指令通过邮件到达触发截图。必须使用 iCloud 邮箱（非 iCloud 邮箱邮件到达有 5-15 分钟延迟）"
+        "hint": "触发邮件发到这里，iPhone 收到后自动截屏。必须是 iCloud 地址（@icloud.com），因为只有 iCloud 是推送的、秒到；QQ/Gmail 要等 iPhone 轮询，会延迟 5-15 分钟。可以和上面的发件账号填成同一个地址（自己发给自己）"
     },
     "webhook_port": {
         "type": "int",
         "description": "截图接收服务端口",
         "default": 8080,
-        "hint": "iPhone 快捷指令将截图 POST 到这个端口。若被防火墙或路由器遮挡，请使用公网 IP 或 Tailscale"
+        "hint": "本插件会在这个端口开一个小型 HTTP 服务，等 iPhone 把截图传回来。若端口被占用请换一个"
     },
     "webhook_path": {
         "type": "string",
         "description": "截图接收路径",
         "default": "/phone/screenshot",
-        "hint": ""
+        "hint": "一般不用改。完整地址是 http://<你的电脑地址>:<端口><这个路径>"
     },
     "webhook_secret": {
         "type": "string",
         "description": "接收服务校验密钥",
         "default": "",
-        "hint": "必填，建议用随机生成的 16 字符以上字符串。iPhone 快捷指令 POST 时需携带相同的 secret"
+        "hint": "必填，随便一串 16 位以上的随机字符（如 a7f3k9m2q5x8w1z4）。作用是防止别人往这个端口乱传图片。iPhone 快捷指令里要填一模一样的"
     },
     "vision_api_url": {
         "type": "string",
         "description": "识图模型 API URL",
         "default": "",
-        "hint": "填入 OpenAI 格式的地址"
+        "hint": "OpenAI 格式的完整地址，通常以 /v1/chat/completions 结尾。可以直接照抄你「电脑查岗」插件里已经填好的那一份"
     },
     "vision_api_key": {
         "type": "string",
         "description": "识图模型 API 密钥",
         "default": "",
-        "hint": "对应上方 API 的密钥"
+        "hint": "对应上方 API 的密钥。同样可以照抄电脑查岗插件的配置"
     },
     "vision_model": {
         "type": "string",
         "description": "识图模型名称",
         "default": "gpt-4o",
-        "hint": "如 gpt-4o, qwen-vl-plus 等"
+        "hint": "必须是支持看图的模型，如 gpt-4o、gemini-2.5-pro、qwen-vl-plus。纯文本模型不行"
     },
     "timeout_seconds": {
         "type": "int",
         "description": "等待截图超时时间(秒)",
         "default": 90,
-        "hint": "从发出触发邮件到收到截图的总超时。手机锁屏、邮件延迟都会影响，建议 60-120"
+        "hint": "从发出触发邮件到收到截图的总等待时间。邮件推送+截屏+上传通常 10-30 秒，建议留 60-120"
     },
     "forward_image": {
         "type": "bool",
-        "description": "是否将截图转发给用户",
+        "description": "是否把截图原图也发给你",
         "default": false,
-        "hint": "开启后，查岗时会将截图同步发给你自己看"
+        "hint": "开启后，AI 查岗时会把那张截图同步发到聊天里给你自己看一眼"
     },
     "auto_fallback": {
         "type": "bool",
-        "description": "手机查岗失败时是否自动回退到电脑查岗",
+        "description": "手机查岗失败时自动改查电脑",
         "default": true,
-        "hint": "开启后，手机截图超时或失败时会自动调用电脑屏幕查看工具"
+        "hint": "手机没响应（锁屏、没网、没配好）时，自动调用「电脑查岗」插件的 check_computer_screen 兜底。需要已安装 screen_monitor 插件"
     },
     "fallback_prompt_template": {
         "type": "string",
