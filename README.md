@@ -1,4 +1,4 @@
-# iOS 快捷指令配置指南（完整版）
+# iOS 快捷指令配置指南
 
 本插件通过 **iCloud 邮件 + iOS 快捷指令自动化** 触发 iPhone 截屏。推荐搭配[屏幕查岗](https://github.com/nikonotnicotine/astrbot_plugin_screen_monitor )使用。
 
@@ -144,7 +144,7 @@
 | `smtp_password` | SMTP 授权码 | `abcd-efgh-ijkl-mnop` | 同本地部署 |
 | `icloud_address` | 收件人 iCloud 邮箱 | `你的名字@icloud.com` | 同本地部署 |
 | `webhook_port` | 接收服务端口 | `9001` | VPS 上选一个未被占用的端口<br>稍后需要在安全组/防火墙放行 |
-| `webhook_path` | 接收路径 | `/phone/screenshot` | **⚠️ 只填路径，不要填完整 URL**<br>**开头必须有 `/`**<br>❌ 错误示例：`/http://112.74.93.209:9001/phone/screenshot`<br>✅ 正确示例：`/phone/screenshot` |
+| `webhook_path` | 接收路径 | `/phone/screenshot` | **⚠️ 只填路径，不要填完整 URL**<br>**开头必须有 `/`**<br>❌ 错误示例：`/http://198.71.9.29:9001/phone/screenshot`<br>✅ 正确示例：`/phone/screenshot` |
 | `webhook_secret` | 校验密钥 | 随机 16 位以上字符串 | 在 VPS 终端执行 `openssl rand -hex 24` 生成 |
 | `vision_api_url` | 识图模型 API | `https://api.openai.com/v1/chat/completions` | 同本地部署 |
 | `vision_api_key` | 识图模型密钥 | `sk-...` | 同本地部署 |
@@ -211,7 +211,7 @@
    - **获取 URL 内容** 动作：
      - **URL** 填：`http://你的VPS公网IP:端口/phone/screenshot`
        - 方案 A（Tailscale）示例：`http://100.64.1.2:9001/phone/screenshot`
-       - 方案 B（公网 IP）示例：`http://112.74.93.209:9001/phone/screenshot`
+       - 方案 B（公网 IP）示例：`http://198.71.9.29:9001/phone/screenshot`
      - **方法**：POST
      - **请求体**：表单
      - **字段 1**：
