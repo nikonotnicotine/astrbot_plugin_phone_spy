@@ -1,0 +1,194 @@
+"""截图接收 HTTP 服务（独立 aiohttp 服务器）。
+
+设计文档中的接收服务原定使用 context.register_web_api(port=, app=)，
+但 AstrBot 4.x 的真实 API 是注册到仪表盘作用域下的路由（需要仪表盘鉴权），
+iPhone 快捷指令无法携带该鉴权，因此本插件改为在 webhook_port 上启动一个
+独立的 aiohttp 服务器，仅监听 /webhook_path 一个路径。
+"""
+from __future__ import annotations
+
+from aiohttp import web
+from astrbot.api import logger
+
+from .pending import pending_manager
+
+
+DEFAULT_PATH = "/phone/screenshot"
+# iPhone 以 JPEG 质量 0.5 上传时通常远小于此值；限制请求体可避免异常大请求占用内存。
+MAX_REQUEST_SIZE = 16 * 1024 * 1024
+
+
+class ScreenshotReceiver:
+    def __init__(self, port: int, path: str, secret: str, json_paths: list[str] | None = None) -> None:
+        self.port = port
+        self.path = self._normalize_path(path)
+        self.secret = secret
+        self.json_paths = [self._normalize_path(p) for p in (json_paths or [])]
+        self._app: web.Application | None = None
+        self._runner: web.AppRunner | None = None
+        self._site: web.TCPSite | None = None
+
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        """把配置里填的路径规整成 aiohttp 能接受的形式。
+
+        控制面板里很容易漏掉开头的 `/`（填成 phone/screenshot），而 aiohttp 的
+        add_route 遇到这种值会直接抛 ValueError，导致整个插件加载失败。这里提前
+        补齐，并在实际发生修正时打日志，方便用户对照快捷指令里的 URL。
+        """
+        raw = (path or "").strip()
+        normalized = raw or DEFAULT_PATH
+        if not normalized.startswith("/"):
+            normalized = "/" + normalized
+        # "/phone/screenshot/" 与 "/phone/screenshot" 视为同一路径
+        normalized = normalized.rstrip("/") or DEFAULT_PATH
+
+        if normalized != raw:
+            logger.warning(
+                f"⚠️ webhook_path 配置为 {raw!r}，已自动规整为 {normalized!r}。"
+                "请确认 iPhone 快捷指令里的 URL 用的是规整后的路径。"
+            )
+        return normalized
+
+    def _extract_image(self, post: web.MultiDictProxy) -> bytes | None:
+        """从 POST 表单中提取 image 字段。
+
+        iPhone 快捷指令以 multipart/form-data 上传图片时会得到 FileField；
+        也可能以字节/字符串形式提交，这里做兼容处理。
+        """
+        val = post.get("image")
+        if val is None:
+            return None
+        if isinstance(val, web.FileField):
+            # aiohttp 的 FileField.file 是 BytesIO
+            data = val.file.read()
+            return data if data else None
+        if isinstance(val, (bytes, bytearray, memoryview)):
+            return bytes(val) if val else None
+        if isinstance(val, str):
+            # 字符串形式：可能是 base64，也可能是未经正确解码的原始字节
+            import base64
+
+            try:
+                return base64.b64decode(val, validate=True)
+            except Exception:
+                try:
+                    return val.encode("latin-1")
+                except Exception:
+                    return None
+        return None
+
+    async def _handle(self, request: web.Request) -> web.Response:
+        if request.method not in ("POST", "PUT"):
+            return web.Response(status=405, text="method not allowed")
+
+        try:
+            post = await request.post()
+        except web.HTTPRequestEntityTooLarge:
+            logger.warning("⚠️ 截图请求体超过 16 MB 限制，已拒绝。")
+            return web.Response(status=413, text="request too large")
+        except Exception as e:
+            logger.error(f"解析截图 POST 请求失败: {e}")
+            return web.Response(status=400, text="bad request")
+
+        # 校验密钥（防伪造请求）
+        secret = post.get("secret")
+        if secret != self.secret:
+            logger.warning("⚠️ 收到密钥不匹配的截图请求，已拒绝。")
+            return web.Response(status=403, text="forbidden")
+
+        image_data = self._extract_image(post)
+        if image_data is None or not image_data:
+            logger.warning("⚠️ 收到缺少图片的截图请求，已拒绝。")
+            return web.Response(status=400, text="missing image field")
+        if len(image_data) > MAX_REQUEST_SIZE:
+            logger.warning(
+                f"⚠️ 截图大小超过限制（{len(image_data)} bytes），已拒绝。"
+            )
+            return web.Response(status=413, text="image too large")
+
+        fulfilled = pending_manager.fulfill(image_data)
+        if fulfilled is None:
+            # 没有待处理请求，但密钥正确：仍返回 200，避免快捷指令报错重试
+            logger.info("截图已接收，但没有待处理的查岗请求。")
+            return web.Response(status=200, text="ok")
+        return web.Response(status=200, text="ok")
+
+    async def _handle_json(self, request: web.Request) -> web.Response:
+        """处理 JSON 数据上传（位置、电量等）。"""
+        if request.method not in ("POST", "PUT"):
+            return web.Response(status=405, text="method not allowed")
+
+        try:
+            post = await request.post()
+        except Exception as e:
+            logger.error(f"解析 JSON POST 请求失败: {e}")
+            return web.Response(status=400, text="bad request")
+
+        # 校验密钥
+        secret = post.get("secret")
+        if secret != self.secret:
+            logger.warning("⚠️ 收到密钥不匹配的 JSON 请求，已拒绝。")
+            return web.Response(status=403, text="forbidden")
+
+        # 提取 data 字段（JSON 文本）
+        data = post.get("data")
+        if data is None:
+            logger.warning("⚠️ 收到缺少 data 字段的 JSON 请求，已拒绝。")
+            return web.Response(status=400, text="missing data field")
+
+        # 转换为字节
+        if isinstance(data, str):
+            data_bytes = data.encode("utf-8")
+        elif isinstance(data, bytes):
+            data_bytes = data
+        else:
+            logger.warning("⚠️ data 字段类型不正确，已拒绝。")
+            return web.Response(status=400, text="invalid data type")
+
+        fulfilled = pending_manager.fulfill(data_bytes)
+        if fulfilled is None:
+            logger.info("JSON 数据已接收，但没有待处理的请求。")
+            return web.Response(status=200, text="ok")
+        return web.Response(status=200, text="ok")
+
+    @property
+    def is_running(self) -> bool:
+        return self._runner is not None
+
+    async def start(self) -> None:
+        if self._runner is not None:
+            return
+        try:
+            self._app = web.Application(client_max_size=MAX_REQUEST_SIZE)
+            self._app.router.add_route("*", self.path, self._handle)
+
+            # 注册 JSON 数据路由
+            for json_path in self.json_paths:
+                self._app.router.add_route("*", json_path, self._handle_json)
+                logger.info(f"📡 已注册 JSON 数据路由: {json_path}")
+
+            self._runner = web.AppRunner(self._app, access_log=None)
+            await self._runner.setup()
+            self._site = web.TCPSite(
+                self._runner, host="0.0.0.0", port=self.port
+            )
+            await self._site.start()
+            logger.info(
+                f"📡 截图接收服务已启动: http://0.0.0.0:{self.port}{self.path}"
+            )
+        except OSError as e:
+            logger.error(
+                f"❌ 截图接收服务启动失败（端口 {self.port} 可能被占用）: {e}"
+            )
+            self._runner = None
+            self._site = None
+            self._app = None
+
+    async def stop(self) -> None:
+        if self._runner is not None:
+            await self._runner.cleanup()
+            self._runner = None
+            self._site = None
+            self._app = None
+            logger.info("📡 截图接收服务已停止。")

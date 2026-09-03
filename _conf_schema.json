@@ -1,0 +1,242 @@
+{
+    "smtp_host": {
+        "type": "string",
+        "description": "【发件方】SMTP 服务器地址",
+        "default": "smtp.mail.me.com",
+        "hint": "AstrBot 用哪个邮箱账号「发出」触发邮件。推荐直接用 iCloud 自己发给自己：smtp.mail.me.com。其他可选：QQ 邮箱 smtp.qq.com、163 邮箱 smtp.163.com、Gmail smtp.gmail.com"
+    },
+    "smtp_port": {
+        "type": "int",
+        "description": "【发件方】SMTP 端口",
+        "default": 587,
+        "hint": "iCloud 必须用 587。QQ/163 用 465。规则：465 = SSL 直连，587 = STARTTLS"
+    },
+    "smtp_user": {
+        "type": "string",
+        "description": "【发件方】登录账号（完整邮箱地址）",
+        "default": "",
+        "hint": "用 iCloud 发信就填你的 iCloud 地址（如 richard.883@gmail.com）。这个地址稍后要填进 iPhone 自动化的「发件人」条件里"
+    },
+    "smtp_password": {
+        "type": "string",
+        "description": "【发件方】App 专用密码 / 授权码",
+        "default": "",
+        "hint": "不是你的登录密码！iCloud: 到 account.apple.com 生成「App 专用密码」（需先开启双重认证）。QQ 邮箱: 设置-账户-开启 SMTP 后获取授权码"
+    },
+    "icloud_address": {
+        "type": "string",
+        "description": "【收件方】iPhone 上登录的 iCloud 邮箱",
+        "default": "",
+        "hint": "触发邮件发到这里，iPhone 收到后自动截屏。必须是 iCloud 地址（@icloud.com），因为只有 iCloud 是推送的、秒到；QQ/Gmail 要等 iPhone 轮询，会延迟 5-15 分钟。可以和上面的发件账号填成同一个地址（自己发给自己）"
+    },
+    "webhook_port": {
+        "type": "int",
+        "description": "截图接收服务端口",
+        "default": 8080,
+        "hint": "本插件会在这个端口开一个小型 HTTP 服务，等 iPhone 把截图传回来。若端口被占用请换一个"
+    },
+    "webhook_path": {
+        "type": "string",
+        "description": "截图接收路径",
+        "default": "/phone/screenshot",
+        "hint": "只填路径部分（如 /phone/screenshot），不要填完整 URL。插件会自动在 webhook_port 上监听这个路径，iPhone 快捷指令里才需要填完整地址 http://你的服务器IP:端口/phone/screenshot"
+    },
+    "webhook_secret": {
+        "type": "string",
+        "description": "接收服务校验密钥",
+        "default": "",
+        "hint": "必填，随便一串 16 位以上的随机字符（如 a7f3k9m2q5x8w1z4）。作用是防止别人往这个端口乱传图片。iPhone 快捷指令里要填一模一样的"
+    },
+    "vision_api_url": {
+        "type": "string",
+        "description": "识图模型 API URL",
+        "default": "",
+        "hint": "OpenAI 格式的完整地址，通常以 /v1/chat/completions 结尾。可以直接照抄你「电脑查岗」插件里已经填好的那一份"
+    },
+    "vision_api_key": {
+        "type": "string",
+        "description": "识图模型 API 密钥",
+        "default": "",
+        "hint": "对应上方 API 的密钥。同样可以照抄电脑查岗插件的配置"
+    },
+    "vision_model": {
+        "type": "string",
+        "description": "识图模型名称",
+        "default": "gpt-4o",
+        "hint": "必须是支持看图的模型，如 gpt-4o、gemini-2.5-pro、qwen-vl-plus。纯文本模型不行"
+    },
+    "timeout_seconds": {
+        "type": "int",
+        "description": "等待截图超时时间(秒)",
+        "default": 90,
+        "hint": "从发出触发邮件到收到截图的总等待时间。邮件推送+截屏+上传通常 10-30 秒，建议留 60-120"
+    },
+    "forward_image": {
+        "type": "bool",
+        "description": "是否把截图原图也发给你",
+        "default": false,
+        "hint": "开启后，AI 查岗时会把那张截图同步发到聊天里给你自己看一眼"
+    },
+    "auto_fallback": {
+        "type": "bool",
+        "description": "手机查岗失败时自动改查电脑",
+        "default": true,
+        "hint": "手机没响应（锁屏、没网、没配好）时，自动调用「电脑查岗」插件的 check_computer_screen 兜底。需要已安装 screen_monitor 插件"
+    },
+    "fallback_prompt_template": {
+        "type": "string",
+        "description": "回退成功时的提示模板",
+        "default": "当前{{failed_device}}因为{{error}}无法查看，系统已返回目前活跃的{{active_device}}设备，请根据人设与上下文向用户发送信息。",
+        "hint": "可用变量: {{failed_device}} {{active_device}} {{error}}。{{error}} 是失败原因；备用设备的查看结果会自动附加在提示语之后，无需在模板里写"
+    },
+    "both_failed_prompt_template": {
+        "type": "string",
+        "description": "手机和电脑都失败时的提示模板",
+        "default": "无法查看当前用户电脑与手机的屏幕，原因可能是{{error}}，可能用户正在忙或者在睡觉，请根据人设向用户发送信息。",
+        "hint": "可用变量: {{error}}（内含手机与电脑各自的失败原因）"
+    },
+    "netease_music": {
+        "type": "object",
+        "description": "网易云音乐控制",
+        "items": {
+            "enable_music_control": {
+                "type": "bool",
+                "description": "是否开启 AI 控制网易云音乐",
+                "default": false,
+                "hint": "开启后 AI 可以控制你的 iPhone 播放网易云音乐。需要在 iPhone 上配置对应的快捷指令"
+            },
+            "enable_daily_recommend": {
+                "type": "bool",
+                "description": "播放每日推荐",
+                "default": false,
+                "hint": "需要先在网易云 App 里注册「每日推荐」的 Siri 捷径"
+            },
+            "enable_personal_fm": {
+                "type": "bool",
+                "description": "播放私人 FM",
+                "default": false,
+                "hint": "需要先在网易云 App 里注册「私人 FM」的 Siri 捷径"
+            },
+            "enable_favorite_playlist": {
+                "type": "bool",
+                "description": "播放红心歌单",
+                "default": false,
+                "hint": "需要先在网易云 App 里注册「我喜欢的音乐」Siri 捷径"
+            },
+            "favorite_playlist_id": {
+                "type": "string",
+                "description": "红心歌单 ID（可选）",
+                "default": "",
+                "hint": "如果使用 URL Scheme 方式，需要填写歌单 ID。打开网易云「我喜欢的音乐」→ 分享 → 复制链接 → playlist 后面那串数字"
+            },
+            "enable_play_pause": {
+                "type": "bool",
+                "description": "播放/暂停当前歌曲",
+                "default": false,
+                "hint": "使用 iOS 系统级媒体控制，不依赖网易云"
+            },
+            "enable_play_song": {
+                "type": "bool",
+                "description": "播放指定歌曲（需网络搜索）",
+                "default": false,
+                "hint": "AI 说「播放晴天」时，插件会自动搜索歌曲 ID 并通过 URL Scheme 播放"
+            },
+            "auto_screenshot_after_music": {
+                "type": "bool",
+                "description": "每次网易云操作后自动截图",
+                "default": false,
+                "hint": "开启后会等待 3 秒并截图，让 AI 确认播放状态。关闭则操作后立即返回"
+            }
+        }
+    },
+    "view_actions": {
+        "type": "object",
+        "description": "查看类操作（必须截图）",
+        "items": {
+            "enable_battery": {
+                "type": "bool",
+                "description": "查看手机电量",
+                "default": false,
+                "hint": "获取 iPhone 当前电量百分比"
+            },
+            "enable_wechat": {
+                "type": "bool",
+                "description": "打开微信并截图",
+                "default": false,
+                "hint": "打开微信 App 并截图，让 AI 看到聊天列表"
+            },
+            "enable_alipay": {
+                "type": "bool",
+                "description": "查看支付宝账单",
+                "default": false,
+                "hint": "打开支付宝账单页面并截图"
+            },
+            "enable_bilibili": {
+                "type": "bool",
+                "description": "查看 B 站观看历史",
+                "default": false,
+                "hint": "打开 B 站历史记录页面并截图"
+            },
+            "enable_douyin_msg": {
+                "type": "bool",
+                "description": "查看抖音私信",
+                "default": false,
+                "hint": "打开抖音私信页面并截图"
+            },
+            "enable_douyin_profile": {
+                "type": "bool",
+                "description": "查看抖音个人主页",
+                "default": false,
+                "hint": "打开抖音个人主页并截图"
+            },
+            "enable_taobao_order": {
+                "type": "bool",
+                "description": "查看淘宝订单",
+                "default": false,
+                "hint": "打开淘宝订单页面并截图"
+            },
+            "enable_taobao_cart": {
+                "type": "bool",
+                "description": "查看淘宝购物车",
+                "default": false,
+                "hint": "打开淘宝购物车并截图"
+            },
+            "auto_screenshot": {
+                "type": "bool",
+                "description": "查看类功能是否自动截图",
+                "default": true,
+                "hint": "⚠️ 关闭此项后，AI 将无法看到屏幕内容，查看类功能会失去意义"
+            }
+        }
+    },
+    "control_actions": {
+        "type": "object",
+        "description": "控制类操作",
+        "items": {
+            "enable_location": {
+                "type": "bool",
+                "description": "获取手机位置",
+                "default": false,
+                "hint": "获取 iPhone 当前 GPS 位置"
+            },
+            "enable_alarm": {
+                "type": "bool",
+                "description": "设置闹钟",
+                "default": false,
+                "hint": "AI 可以帮你在 iPhone 上设置闹钟"
+            },
+            "enable_lock_screen": {
+                "type": "bool",
+                "description": "锁定屏幕",
+                "default": false,
+                "hint": "远程锁定 iPhone 屏幕"
+            },
+            "auto_screenshot_after_control": {
+                "type": "bool",
+                "description": "控制类操作后是否截图",
+                "default": false,
+                "hint": "控制类功能（播放音乐、定闹钟、锁屏）不需要截图。开启此项可以确认操作结果"
+            }
+        }
+    }
+}

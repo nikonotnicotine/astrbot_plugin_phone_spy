@@ -1,0 +1,5 @@
+name: astrbot_plugin_phone_spy
+display_name: 手机查岗 (Phone Spy)
+desc: 允许大模型调用函数工具，通过 iCloud 邮件自动化触发 iPhone 截图回传，并进行视觉分析。
+version: 0.1.0
+author: nikonotnicotine
