@@ -124,7 +124,13 @@ class PhoneSpy(Star):
             return "手机查岗失败：触发邮件发送失败，请检查 SMTP 配置。"
 
         # 2. 创建等待条目，等待截图到达
-        req_id = pending_manager.create()
+        try:
+            req_id = pending_manager.create()
+        except RuntimeError as e:
+            logger.warning(f"⚠️ 手机查岗请求被限流: {e}")
+            if self.auto_fallback:
+                return await self._fallback(event, "待处理查岗请求过多")
+            return "手机查岗失败：当前查岗请求过多，请稍后再试。"
         logger.info(
             f"📱 触发邮件已发送，等待 iPhone 截图回传（超时 {self.timeout_seconds} 秒）..."
         )

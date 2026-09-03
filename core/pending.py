@@ -14,6 +14,9 @@ from dataclasses import dataclass, field
 from astrbot.api import logger
 
 
+MAX_PENDING_REQUESTS = 8
+
+
 @dataclass
 class PendingRequest:
     req_id: str
@@ -29,6 +32,10 @@ class PendingManager:
 
     def create(self) -> str:
         """创建一个等待条目，返回其请求 id。"""
+        if len(self._pending) >= MAX_PENDING_REQUESTS:
+            raise RuntimeError(
+                f"待处理查岗请求已达到上限（{MAX_PENDING_REQUESTS}）"
+            )
         req_id = f"req-{next(self._counter)}"
         self._pending[req_id] = PendingRequest(req_id=req_id)
         logger.debug(f"待处理查岗请求已创建: {req_id}，当前待处理数: {len(self._pending)}")

@@ -39,7 +39,7 @@
         "type": "string",
         "description": "截图接收路径",
         "default": "/phone/screenshot",
-        "hint": "一般不用改。完整地址是 http://<你的电脑地址>:<端口><这个路径>"
+        "hint": "只填路径部分（如 /phone/screenshot），不要填完整 URL。插件会自动在 webhook_port 上监听这个路径，iPhone 快捷指令里才需要填完整地址 http://你的服务器IP:端口/phone/screenshot"
     },
     "webhook_secret": {
         "type": "string",

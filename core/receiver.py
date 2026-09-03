@@ -13,14 +13,41 @@ from astrbot.api import logger
 from .pending import pending_manager
 
 
+DEFAULT_PATH = "/phone/screenshot"
+# iPhone 以 JPEG 质量 0.5 上传时通常远小于此值；限制请求体可避免异常大请求占用内存。
+MAX_REQUEST_SIZE = 16 * 1024 * 1024
+
+
 class ScreenshotReceiver:
     def __init__(self, port: int, path: str, secret: str) -> None:
         self.port = port
-        self.path = path
+        self.path = self._normalize_path(path)
         self.secret = secret
         self._app: web.Application | None = None
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
+
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        """把配置里填的路径规整成 aiohttp 能接受的形式。
+
+        控制面板里很容易漏掉开头的 `/`（填成 phone/screenshot），而 aiohttp 的
+        add_route 遇到这种值会直接抛 ValueError，导致整个插件加载失败。这里提前
+        补齐，并在实际发生修正时打日志，方便用户对照快捷指令里的 URL。
+        """
+        raw = (path or "").strip()
+        normalized = raw or DEFAULT_PATH
+        if not normalized.startswith("/"):
+            normalized = "/" + normalized
+        # "/phone/screenshot/" 与 "/phone/screenshot" 视为同一路径
+        normalized = normalized.rstrip("/") or DEFAULT_PATH
+
+        if normalized != raw:
+            logger.warning(
+                f"⚠️ webhook_path 配置为 {raw!r}，已自动规整为 {normalized!r}。"
+                "请确认 iPhone 快捷指令里的 URL 用的是规整后的路径。"
+            )
+        return normalized
 
     def _extract_image(self, post: web.MultiDictProxy) -> bytes | None:
         """从 POST 表单中提取 image 字段。
@@ -56,6 +83,9 @@ class ScreenshotReceiver:
 
         try:
             post = await request.post()
+        except web.HTTPRequestEntityTooLarge:
+            logger.warning("⚠️ 截图请求体超过 16 MB 限制，已拒绝。")
+            return web.Response(status=413, text="request too large")
         except Exception as e:
             logger.error(f"解析截图 POST 请求失败: {e}")
             return web.Response(status=400, text="bad request")
@@ -70,6 +100,11 @@ class ScreenshotReceiver:
         if image_data is None or not image_data:
             logger.warning("⚠️ 收到缺少图片的截图请求，已拒绝。")
             return web.Response(status=400, text="missing image field")
+        if len(image_data) > MAX_REQUEST_SIZE:
+            logger.warning(
+                f"⚠️ 截图大小超过限制（{len(image_data)} bytes），已拒绝。"
+            )
+            return web.Response(status=413, text="image too large")
 
         fulfilled = pending_manager.fulfill(image_data)
         if fulfilled is None:
@@ -86,7 +121,7 @@ class ScreenshotReceiver:
         if self._runner is not None:
             return
         try:
-            self._app = web.Application()
+            self._app = web.Application(client_max_size=MAX_REQUEST_SIZE)
             self._app.router.add_route("*", self.path, self._handle)
             self._runner = web.AppRunner(self._app, access_log=None)
             await self._runner.setup()
