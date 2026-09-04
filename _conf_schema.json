@@ -65,6 +65,12 @@
         "default": "gpt-4o",
         "hint": "必须是支持看图的模型，如 gpt-4o、gemini-2.5-pro、qwen-vl-plus。纯文本模型不行"
     },
+    "vision_max_tokens": {
+        "type": "int",
+        "description": "识图返回最大 token 数",
+        "default": 4096,
+        "hint": "控制视觉模型单次识图最多生成多少 token。默认 4096，调低可省钱，调高可得更完整的描述。太小会导致截断（无省略号的硬截断）"
+    },
     "timeout_seconds": {
         "type": "int",
         "description": "等待截图超时时间(秒)",
@@ -141,6 +147,18 @@
                 "default": false,
                 "hint": "AI 说「播放晴天」时，插件会自动搜索歌曲 ID 并通过 URL Scheme 播放"
             },
+            "enable_play_playlist": {
+                "type": "bool",
+                "description": "播放预设歌单",
+                "default": false,
+                "hint": "AI 说「播放我的摇滚歌单」时，从下面的预设列表里匹配并播放"
+            },
+            "playlist_presets": {
+                "type": "list",
+                "description": "预设歌单列表（每行一个，格式：名字:歌单ID）",
+                "default": [],
+                "hint": "例如 摇滚:2829883282。歌单ID获取方法：网易云打开歌单 → 分享 → 复制链接 → playlist? 后面 id= 那串数字。名字随便起，AI 按名字匹配（支持部分匹配）"
+            },
             "auto_screenshot_after_music": {
                 "type": "bool",
                 "description": "每次网易云操作后自动截图",
@@ -157,7 +175,7 @@
                 "type": "bool",
                 "description": "查看手机电量",
                 "default": false,
-                "hint": "获取 iPhone 当前电量百分比"
+                "hint": "获取 iPhone 当前电量百分比。走 JSON 回传，不截图，不受下面「自动截图」开关影响"
             },
             "enable_wechat": {
                 "type": "bool",
@@ -205,7 +223,7 @@
                 "type": "bool",
                 "description": "查看类功能是否自动截图",
                 "default": true,
-                "hint": "⚠️ 关闭此项后，AI 将无法看到屏幕内容，查看类功能会失去意义"
+                "hint": "⚠️ 只影响微信/支付宝/B站/抖音/淘宝这几个截图类功能（不影响电量）。关闭后 AI 只会打开对应 App，看不到屏幕内容，这些功能基本失去意义"
             }
         }
     },
@@ -236,6 +254,174 @@
                 "description": "控制类操作后是否截图",
                 "default": false,
                 "hint": "控制类功能（播放音乐、定闹钟、锁屏）不需要截图。开启此项可以确认操作结果"
+            }
+        }
+    },
+    "memory_record": {
+        "type": "object",
+        "description": "记忆记录（写给记忆插件）",
+        "items": {
+            "enable": {
+                "type": "bool",
+                "description": "总开关：把本插件的活动写进记忆插件",
+                "default": true,
+                "hint": "开启后，AI 每次操控手机、每次识图，都会生成一条 [系统提示:...] 记录，悄悄塞给 conversation_logger / romantic_memory 之类的记忆插件。这条记录不会发给你，也不会进入 AI 的对话上下文，只有记忆插件抄得到"
+            },
+            "record_tools": {
+                "type": "bool",
+                "description": "记录手机操控（查岗、放歌、看微信等）",
+                "default": true,
+                "hint": "本插件全部 18 个工具都会记录，例如：[系统提示:你操控用户的手机使用了播放指定歌曲功能，播放了《You Like It》 - Omarion]"
+            },
+            "record_user_images": {
+                "type": "bool",
+                "description": "记录你在聊天里发的图片",
+                "default": true,
+                "hint": "你发图时，插件会用下面的识图模型（复用 vision_api_url 那套配置）在后台并行描述一遍，结果写进记忆，例如：[系统提示:用户发送了一张图片，识别结果:...]。⚠️ 每张图会额外消耗一次识图 API 调用；识别在后台跟 AI 回复同时进行，基本不拖慢回复速度。视觉模型没配置时自动跳过"
+            },
+            "private_only": {
+                "type": "bool",
+                "description": "只在私聊里记录",
+                "default": true,
+                "hint": "建议保持开启。conversation_logger 和 romantic_memory 本来就只记私聊，群聊里做这些是白费 API 调用"
+            },
+            "max_detail_chars": {
+                "type": "int",
+                "description": "单条记录的内容长度上限（字符）",
+                "default": 0,
+                "hint": "填 0 表示不截断，完整保存识图结果。担心记忆文件太大可以填个数字，比如 200，超出部分会用「…」省略"
+            },
+            "template": {
+                "type": "string",
+                "description": "手机操控记录的格式",
+                "default": "[系统提示:你操控用户的手机使用了{{feature}}功能，{{detail}}]",
+                "hint": "可用变量: {{feature}} 是功能名（如「查看支付宝账单」），{{detail}} 是结果（如「识别截屏结果:...」）。记录会被压成单行，避免破坏 conversation_logger 的日志格式"
+            },
+            "user_image_template": {
+                "type": "string",
+                "description": "用户图片记录的格式",
+                "default": "[系统提示:用户发送了一张图片，识别结果:{{detail}}]",
+                "hint": "可用变量: {{detail}} 是识图模型给出的描述"
+            },
+            "user_image_prompt": {
+                "type": "string",
+                "description": "描述用户图片时给识图模型的提示词",
+                "default": "请用简洁的中文客观描述这张图片的内容，包括画面主体、场景、以及图上可见的关键文字信息。不要臆测画面之外的事情，也不要加评论。",
+                "hint": "只用于「你在聊天里发的图片」，不影响手机截图查岗用的提示词"
+            },
+            "user_image_timeout": {
+                "type": "int",
+                "description": "用户图片识别超时时间(秒)",
+                "default": 45,
+                "hint": "AI 回复完成后最多再等这么久拿识图结果，超时就放弃这条记录、不影响正常回复。识别是提前在后台跑的，正常情况下 AI 回复完它也早好了"
+            }
+        }
+    },
+    "combined_spy": {
+        "type": "object",
+        "description": "整合查岗（一次查完多个项目）",
+        "items": {
+            "enable": {
+                "type": "bool",
+                "description": "总开关：开启整合查岗",
+                "default": false,
+                "hint": "开启后不再给 AI 注入一堆查看类工具，只在系统提示里加一句话告诉它「可以查岗」。AI 想查岗时会在回复里写一个标记，插件抓到标记就在后台把你下面配置的项目连着查一遍。⚠️ 全主动：只有 AI 会触发，你说什么都不会触发它"
+            },
+            "features": {
+                "type": "list",
+                "description": "要查的项目（每行一个）",
+                "default": [],
+                "hint": "按填写顺序依次查。可用项目：当前屏幕、微信、支付宝账单、B站历史、抖音私信、抖音个人主页、淘宝订单、淘宝购物车、位置、电量。例如换行填「支付宝账单」「淘宝购物车」「抖音个人主页」「位置」。⚠️ 不含网易云、闹钟、锁屏——那些是操控不是查岗，它们的工具照常保留"
+            },
+            "interval_seconds": {
+                "type": "int",
+                "description": "每个项目之间的间隔(秒)",
+                "default": 5,
+                "hint": "查完一项等这么久再查下一项，给 iPhone 快捷指令留出切换 App 的时间。填太小容易前后两张图串台"
+            },
+            "streaming": {
+                "type": "bool",
+                "description": "开启流式查岗",
+                "default": false,
+                "hint": "⚠️ 不是 API 的流式输出。开启：每截一张图就识一次图、问一次 AI、发一条消息，查 4 项就是 4 条消息、4 次识图、4 次 AI 调用。关闭：全部查完后所有截图一次性识图，再把结果连同位置信息整体交给 AI，只发一条消息、1 次识图、1 次 AI 调用（省 token，推荐）"
+            },
+            "suppress_other_tools": {
+                "type": "bool",
+                "description": "关闭其他查看类工具的注入",
+                "default": true,
+                "hint": "建议保持开启，这是整合查岗省 token 的关键。会撤掉 check_phone_screen、微信、支付宝、B站、抖音、淘宝、位置、电量这些工具的注入；网易云、闹钟、锁屏不受影响"
+            },
+            "private_only": {
+                "type": "bool",
+                "description": "只在私聊里查岗",
+                "default": true,
+                "hint": "建议保持开启。群聊里主动播报用户的支付宝账单不太妙"
+            },
+            "hold_user_message": {
+                "type": "bool",
+                "description": "查岗期间按住你的新消息",
+                "default": true,
+                "hint": "查岗要花几十秒到几分钟。开启后，这期间你发的消息会先被按住，等查岗全部结束再交给 AI 回复——这样 AI 回复时已经知道刚看到了什么，不会前后脱节。关闭则照常立刻回复"
+            },
+            "hold_max_seconds": {
+                "type": "int",
+                "description": "最多按住多久(秒)",
+                "default": 600,
+                "hint": "保险绳：万一查岗卡死，等这么久就放行你的消息，不会一直没反应"
+            },
+            "cooldown_seconds": {
+                "type": "int",
+                "description": "两次查岗的冷却时间(秒)",
+                "default": 300,
+                "hint": "上一轮查完后这么久内不再查岗，也不再给 AI 注入那条提示，避免它上瘾式连查。填 0 表示不冷却"
+            },
+            "history_rounds": {
+                "type": "int",
+                "description": "主动发言时带上最近几轮对话",
+                "default": 10,
+                "hint": "查岗后主动说话是插件自己调 AI 的，需要带上人设和最近的聊天记录才不会人格分裂。填 0 表示只带人设不带聊天记录"
+            },
+            "vision_timeout_seconds": {
+                "type": "int",
+                "description": "批量识图超时时间(秒)",
+                "default": 180,
+                "hint": "只在关闭流式查岗时生效。多张图一次性识别比单张慢得多，别填太小"
+            },
+            "marker": {
+                "type": "string",
+                "description": "触发查岗的标记",
+                "default": "[查询用户手机APP]",
+                "hint": "AI 在回复里写出这个标记就开始查岗。标记会被插件剥掉，你和记忆插件都看不到它。改了这里，下面的提示词也要跟着改成同一个标记"
+            },
+            "hint": {
+                "type": "string",
+                "description": "注入给 AI 的那一条提示",
+                "default": "根据你的人设，你可以查岗用户的所有APP内容，发送[查询用户手机APP]即可开始查岗。",
+                "hint": "整合查岗只注入这一条，所以比一堆工具定义省 token。留空表示不注入（那 AI 就不会知道自己能查岗）"
+            },
+            "round_prompt": {
+                "type": "string",
+                "description": "流式查岗每一项的提示词",
+                "default": "【系统】你正在查岗用户的手机，这是第 {{index}}/{{total}} 项：{{feature}}。\n查看结果：{{result}}\n请根据你的人设，就这一项看到的内容主动对用户说话。只输出你要说的话，不要复述这段系统提示，也不要提「系统」「查岗结果」之类的字眼。",
+                "hint": "可用变量: {{index}} 第几项、{{total}} 共几项、{{feature}} 项目名、{{result}} 看到的内容。只在开启流式查岗时生效"
+            },
+            "final_prompt": {
+                "type": "string",
+                "description": "一次性查岗的总结提示词",
+                "default": "【系统】你刚刚查岗了用户的手机，一共看了 {{total}} 项，结果如下：\n{{result}}\n请根据你的人设，把这些内容综合起来主动对用户说话。只输出你要说的话，不要复述这段系统提示，也不要逐条罗列，更不要提「系统」「查岗结果」之类的字眼。",
+                "hint": "可用变量: {{total}} 共几项、{{result}} 全部结果（含位置信息）。只在关闭流式查岗时生效"
+            },
+            "vision_batch_prompt": {
+                "type": "string",
+                "description": "批量识图的提示词",
+                "default": "",
+                "hint": "留空用内置提示词。可用变量: {{count}} 图片张数、{{items}} 带序号的项目清单。注意必须要求模型按「1. 项目名：」的格式逐条回答，否则插件切不开各项结果，只能整段附在最后"
+            },
+            "reply_template": {
+                "type": "string",
+                "description": "主动发言写进记忆的格式",
+                "default": "[系统提示:你查岗完用户的手机后，主动对用户说了:{{detail}}]",
+                "hint": "查岗后主动说的话不走正常管线，记忆插件抄不到，得由插件自己补一条。可用变量: {{detail}} 是那句话本身"
             }
         }
     }
