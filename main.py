@@ -130,6 +130,8 @@ class PhoneSpy(Star):
         control_actions = self.config.get("control_actions", {})
         self.enable_location = control_actions.get("enable_location", False)
         self.enable_alarm = control_actions.get("enable_alarm", False)
+        self.enable_alarm_on = control_actions.get("enable_alarm_on", False)
+        self.enable_alarm_off = control_actions.get("enable_alarm_off", False)
         self.enable_lock_screen = control_actions.get("enable_lock_screen", False)
         self.auto_screenshot_after_control = control_actions.get("auto_screenshot_after_control", False)
 
@@ -249,6 +251,10 @@ class PhoneSpy(Star):
             tm.remove_func("get_phone_location")
         if not self.enable_alarm:
             tm.remove_func("set_phone_alarm")
+        if not self.enable_alarm_on:
+            tm.remove_func("enable_phone_alarm")
+        if not self.enable_alarm_off:
+            tm.remove_func("disable_phone_alarm")
         if not self.enable_lock_screen:
             tm.remove_func("lock_phone_screen")
 
@@ -1473,6 +1479,36 @@ class PhoneSpy(Star):
             )
         self._memo(event, "设置闹钟", f"设置了 {time} 的闹钟")
         return f"已向 iPhone 发送设置闹钟 {time} 的指令。"
+
+    @llm_tool("enable_phone_alarm")
+    async def enable_phone_alarm(self, event: AstrMessageEvent, time: str):
+        """开启 iPhone 上指定时间的闹钟（该时间的闹钟必须已存在，新建闹钟请用 set_phone_alarm）。
+
+        Args:
+            time(string): 闹钟时间，24 小时制 HH:MM 格式，如 "07:30"、"22:00"
+        """
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_ON_ALARM", body=time)
+        if self.auto_screenshot_after_control:
+            return await self._wait_screenshot_and_analyze(
+                f"开启闹钟 {time}", event, "开启闹钟", f"开启了 {time} 的闹钟，"
+            )
+        self._memo(event, "开启闹钟", f"开启了 {time} 的闹钟")
+        return f"已向 iPhone 发送开启 {time} 闹钟的指令。"
+
+    @llm_tool("disable_phone_alarm")
+    async def disable_phone_alarm(self, event: AstrMessageEvent, time: str):
+        """关闭 iPhone 上指定时间的闹钟（该时间的闹钟必须已存在）。
+
+        Args:
+            time(string): 闹钟时间，24 小时制 HH:MM 格式，如 "07:30"、"22:00"
+        """
+        await send_trigger_email(**self._smtp_kwargs(), subject="ASTRBOT_OFF_ALARM", body=time)
+        if self.auto_screenshot_after_control:
+            return await self._wait_screenshot_and_analyze(
+                f"关闭闹钟 {time}", event, "关闭闹钟", f"关闭了 {time} 的闹钟，"
+            )
+        self._memo(event, "关闭闹钟", f"关闭了 {time} 的闹钟")
+        return f"已向 iPhone 发送关闭 {time} 闹钟的指令。"
 
     @llm_tool("lock_phone_screen")
     async def lock_phone_screen(self, event: AstrMessageEvent):

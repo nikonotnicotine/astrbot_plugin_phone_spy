@@ -243,6 +243,18 @@
                 "default": false,
                 "hint": "AI 可以帮你在 iPhone 上设置闹钟"
             },
+            "enable_alarm_on": {
+                "type": "bool",
+                "description": "开启指定时间闹钟",
+                "default": false,
+                "hint": "AI 可以开启 iPhone 上指定时间的闹钟（该时间的闹钟必须已存在）。需在 iPhone 上另外建一条「开关闹钟」自动化"
+            },
+            "enable_alarm_off": {
+                "type": "bool",
+                "description": "关闭指定时间闹钟",
+                "default": false,
+                "hint": "AI 可以关闭 iPhone 上指定时间的闹钟（该时间的闹钟必须已存在）。需在 iPhone 上另外建一条「开关闹钟」自动化"
+            },
             "enable_lock_screen": {
                 "type": "bool",
                 "description": "锁定屏幕",
